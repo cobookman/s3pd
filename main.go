@@ -1,157 +1,121 @@
 package main
 
 import (
-	"strings"
 	"context"
-	"flag"
+	"errors"
+	flag "github.com/spf13/pflag"
 	"fmt"
-	"github.com/op/go-logging"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	s3manager "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/cheggaaa/pb/v3"
-	"io"
+	"github.com/op/go-logging"
+	"net/url"
 	"os"
-	"path/filepath"
 	"runtime/pprof"
-	"sync"
-	"time"
+	"strings"
 )
 
 var (
+	// flags & args
+	source      string
+	destination string
 	region      string
-	bucket      string
-	prefix      string
-	writeDir    string
 	downloaders uint
 	threads     uint
-	partSize    int64
+	partsize    int64
 	maxListKeys int
+	benchmark   bool
+	loglevel    string
+	cpuprofile  string
 
-	startTimeNanos int64
-	benchmark      bool
-	loglevel       string
-	cpuprofile     string
+	// globals
 	log = logging.MustGetLogger("s3pd")
-	downloadBar = pb.New(1)
 )
 
 func init() {
-	flag.StringVar(&region, "region", "", "AWS Region")
-	flag.StringVar(&bucket, "bucket", "", "S3 bucket to download from")
-	flag.StringVar(&prefix, "prefix", "", "S3 prefix of objects (Optional)")
-	flag.StringVar(&writeDir, "writedir", "", "Directory to write files to")
-	flag.UintVar(&downloaders, "downloaders", 10, "Number of concurrent s3 downloads")
-	flag.UintVar(&threads, "threads", 5, "Number of threads used by each downloader")
-	flag.Int64Var(&partSize, "partsize", 5*1024*1024, "bytes to assign each thread to download, default of 5*1024*1024 (5MiB)")
-	flag.IntVar(&maxListKeys, "maxlistkeys", 1000, "max number of object keys to return in each ls pagination request")
-	flag.BoolVar(&benchmark, "benchmark", false, "set to true to test raw download to ram speed")
-	flag.StringVar(&loglevel, "loglevel", "NOTICE", "Level of logging to expose, INFO, NOTICE, WARNING, ERROR - Default is NOTICE")
-	flag.StringVar(&cpuprofile, "cpuprofile", "", "Writes cpu profile to specified filepath")
+	// if region is left as an empty string, AWS SDK will get the region from:
+	// environment variables, AWS shared configuration file (~/.aws/config),
+	// or AWS shared credentials file (~/.aws/credentials).
+	flag.StringVar(&region, "region", "", "Force a specific S3 AWS Region endpoint to be used (Optional)")
+
+	flag.UintVar(&downloaders, "downloaders", 10, "Number of concurrent s3 downloads (Default 10)")
+	flag.UintVar(&threads, "threads", 5, "Number of threads used by each downloader (Default 5)")
+	flag.Int64Var(&partsize, "partsize", 5*1024*1024, "bytes to assign each thread to download, (Deafult 5*1024*1024)")
+	flag.IntVar(&maxListKeys, "maxlistkeys", 1000, "max number of object keys to return in each ls pagination request (Default 1000)")
+	flag.BoolVar(&benchmark, "benchmark", false, "set to true to test raw download to ram speed (Default false)")
+	flag.StringVar(&loglevel, "loglevel", "NOTICE", "Level of logging to expose, INFO, NOTICE, WARNING, ERROR. (Default \"NOTICE\")")
+	flag.StringVar(&cpuprofile, "cpuprofile", "", "Writes cpu profile to specified filepath (Optional)")
+}
+
+func parseS3Path(path string) (bucket string, prefix string) {
+	if !strings.HasPrefix(path, "s3://") {
+		return "", ""
+	}
+
+	u, _ := url.Parse(source)
+	bucket = u.Host
+	prefix = u.Path
+
+	// remove starting slash
+	if strings.HasPrefix(prefix, "/") {
+		prefix = prefix[1:]
+	}
+	return bucket, prefix
+}
+
+func parseFlags() error {
+	flag.Usage = func() {
+		w := os.Stdout
+		fmt.Fprintf(w, "\033[1mDESCRIPTION:\033[0m\n")
+		fmt.Fprintf(w, "3pd is a utility for downloading or uploading multiple S3 objects at a time using multiple threads\n\n")
+		fmt.Fprintf(w, "\033[1mUSAGE:\033[0m\n")
+		fmt.Fprintf(w, "s3pd [flags] [source] [destination]\n\n")
+		fmt.Fprintf(w, "\033[1mEXAMPLES:\033[0m\n")
+		fmt.Fprintf(w, "The following is how to download objects in mybucket with the prefix of mydataset/* to /mnt/scratch\n\n")
+		fmt.Fprintf(w, "\ts3pd s3://mybucket/mydataset/* /mnt/scratch\n\n\n")
+		fmt.Fprintf(w, "The following is how to download objects in mybucket with the prefix of mydataset/* to /mnt/scratch")
+		fmt.Fprintf(w, "using the s3 api in us-east-2, and downloading 25 objects at a time\n\n")
+		fmt.Fprintf(w, "\ts3pd s3://mybucket/mydataset/* /mnt/scratch --region=us-east-2 --downloaders=25\n\n\n")
+		fmt.Fprintf(w, "The following is how to download objects in mybucket with the prefix of mydataset/* to /mnt/scratch")
+		fmt.Fprintf(w, "using the s3 api in us-east-2, and downloading 25 objects at a time. With 5 threads used ")
+		fmt.Fprintf(w, "to download each object. 125 concurrent s3 downloads total)\n\n")
+		fmt.Fprintf(w, "\ts3pd s3://mybucket/mydataset/* /mnt/scratch --region=us-east-2 --downloaders=25 --threads=5\n\n")
+		fmt.Fprintf(w, "\033[1mFLAGS:\033[0m\n")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
-}
 
-func worker(id int, downloader *s3manager.Downloader, jobs <-chan s3types.Object, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	for j := range jobs {
-		path := fmt.Sprintf("%s/%s", writeDir, *j.Key)
-		
-		log.Debugf("worker-%d writing s3://%s/%s to %s [%.2fMiB]\n",
-			id,
-			bucket, *j.Key,
-			path,
-			(float64(j.Size) / 1024 / 1024))
-
-		var w io.WriterAt
-		if benchmark {
-			w = NewDiscardWriteBuffer()
-		} else {
-			// ensure dir is created. MkdirAll returns nil if folder already exists
-			if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
-				panic(err)
-			}
-
-			var err error
-			w, err = os.Create(path)
-			if err != nil {
-				panic(err)
-			}
-		}
-
-		w = NewLogProgressWriteBuffer(downloadBar, w)
-
-		_, err := downloader.Download(context.Background(), w, &s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    j.Key,
-		})
-
-		if err != nil {
-			panic(err)
-		}
+	args := flag.Args()
+	isHelp := len(args) == 1 && args[0] == "help"
+	hasSourceAndDest := len(args) == 2 || (len(args) == 1 && benchmark)
+	if isHelp && !hasSourceAndDest {
+		return errors.New("Missing [source] and [destination]")
 	}
-}
 
-func list(client *s3.Client, jobs chan<- s3types.Object) error {
-	log.Debugf("Listing objects with the prefix of s3://%s/%s\n", bucket, prefix)
-	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
-		Bucket:  &bucket,
-		Prefix:  &prefix,
-		MaxKeys: int32(maxListKeys),
-	})
-
-
-	var numBytes int64 = 0
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(context.Background())
-		if err != nil {
-			return fmt.Errorf("Error listing objects: %w", err)
-		}
-		if startTimeNanos == 0 {
-			startTimeNanos = time.Now().UnixNano()
-		}
-
-		log.Debugf("Scheduling %d objects to be downloaded\n", len(page.Contents))
-
-		for _, item := range page.Contents {
-			jobs <- item
-			numBytes += item.Size // size in Bytes
-		}
-		downloadBar.SetTotal(numBytes)
+	if !isHelp {
+		source = args[0]
 	}
+	
+	if !isHelp && !benchmark {
+		destination = args[1]
+	}
+
+	// Error if both source & Destination are s3 paths
+	if !isHelp && strings.HasPrefix(source, "s3://") && strings.HasPrefix(destination, "s3://") {
+		err := "Cannot have s3 as both the source & destination.\n"
+		err += "s3pd does not support moving objects between S3 buckets"
+		return errors.New(err)
+	}
+
 	return nil
 }
 
 func main() {
-	// Create new go-logging instance that sets logs to the declared level.
-	lm := logging.AddModuleLevel(logging.NewLogBackend(os.Stderr, "", 0))
-	logLevels := map[string]logging.Level{
-		"DEBUG": logging.DEBUG,
-		"INFO":   logging.INFO,
-		"NOTICE": logging.NOTICE,
-		"WARNING": logging.WARNING,
-		"ERROR": logging.ERROR,
-		"CRITICAL": logging.CRITICAL,
+	if err := parseFlags(); err != nil {
+		fmt.Fprintln(os.Stderr, "\033[1;31m"+err.Error()+"\033[0m")
+		os.Exit(1)
 	}
-	lm.SetLevel(logLevels[strings.ToUpper(loglevel)], "")
-	logging.SetBackend(lm)
 
-	// Check for manditory parameters
-	if len(region) == 0 {
-		fmt.Fprintln(os.Stderr, "missing --region")
-		flag.PrintDefaults()
-		return
-	}
-	if len(bucket) == 0 {
-		fmt.Fprintln(os.Stderr, "missing --bucket")
-		flag.PrintDefaults()
-		return
-	}
-	if !benchmark && len(writeDir) == 0 {
-		fmt.Fprintln(os.Stderr, "missing --writeDir")
-		flag.PrintDefaults()
+	if flag.Args()[0] == "help" {
+		flag.Usage()
 		return
 	}
 
@@ -174,52 +138,44 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	downloadStart := time.Now()
-
-	// Create s3 client
-	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
-	if err != nil {
-		fmt.Errorf("configuration error, %w", err)
-		return
+	// Create new go-logging instance that sets logs to the declared level.
+	lm := logging.AddModuleLevel(logging.NewLogBackend(os.Stderr, "", 0))
+	logLevels := map[string]logging.Level{
+		"DEBUG":    logging.DEBUG,
+		"INFO":     logging.INFO,
+		"NOTICE":   logging.NOTICE,
+		"WARNING":  logging.WARNING,
+		"ERROR":    logging.ERROR,
+		"CRITICAL": logging.CRITICAL,
 	}
-	client := s3.NewFromConfig(cfg)
+	lm.SetLevel(logLevels[strings.ToUpper(loglevel)], "")
+	logging.SetBackend(lm)
 
-	// Instantiate download workers
-	// Set channel length to 3x max objects we'll get in a list op
-	// if the job queue ends up filling up, we'll stall doing additional list ops until the queue has more messages completed
-	jobs := make(chan s3types.Object, maxListKeys * 3)
-	wg := new(sync.WaitGroup)
-	downloader := s3manager.NewDownloader(client, func(d *s3manager.Downloader) {
-		d.PartSize = partSize
-		d.Concurrency = int(threads)
-		d.BufferProvider = s3manager.NewPooledBufferedWriterReadFromProvider(int(partSize))
-	})
-	
-	for d := 1; d < int(downloaders); d++ {
-		wg.Add(1)
-		go worker(int(d), downloader, jobs, wg)
+	if strings.HasPrefix(source, "s3://") {
+		performDownload()
+	} else if strings.HasPrefix(destination, "s3://") {
+		panic("writes not yet implemented")
+	}
+}
+
+func performDownload() {
+	bucket, prefix := parseS3Path(source)
+
+	download := Download{
+		bucket:      bucket,
+		prefix:      prefix,
+		writepath:   destination,
+		region:      region,
+		downloaders: downloaders,
+		threads:     threads,
+		partsize:    partsize,
+		maxListKeys: maxListKeys,
+		bar:         pb.New(1), // putting bar size of 1 as a placeholder
 	}
 
-	// Queue up download tasks
-	if err := list(client, jobs); err != nil {
+	if err := download.Start(context.Background()); err != nil {
 		panic(err)
 	}
 
-	// Indicate that we listed every single object and there's no more objs needing to be queued
-	close(jobs)
-
-	// Display the progress bar
-	downloadBar.SetWriter(os.Stdout)
-	downloadBar.Set(pb.SIBytesPrefix, false)
-	downloadBar.Set(pb.Bytes, true)
-	downloadBar.Start()
-
-	// Wait till all downloads finish
-	wg.Wait()
-	downloadBar.Finish()
-
-	// Print final throughput estimate
-	fmt.Printf("\nAverage throughput was: %0.4fGibps\n",
-		float64(downloadBar.Total()) * 8 / 1024 / 1024 / 1024 / time.Since(downloadStart).Seconds())
+	fmt.Printf("\nAverage throughput was: %0.4fGibps\n", download.Throughput())
 }
-

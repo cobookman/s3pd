@@ -1,9 +1,9 @@
 package main
 
 import (
+	"github.com/cheggaaa/pb/v3"
 	"io"
 	"io/ioutil"
-	"github.com/cheggaaa/pb/v3"
 )
 
 type DiscardWriteBuffer struct {
@@ -19,7 +19,7 @@ func (w DiscardWriteBuffer) WriteAt(p []byte, offset int64) (n int, err error) {
 
 type LogProgressWriteBuffer struct {
 	bar *pb.ProgressBar
-	w io.WriterAt
+	w   io.WriterAt
 }
 
 func NewLogProgressWriteBuffer(bar *pb.ProgressBar, w io.WriterAt) *LogProgressWriteBuffer {
@@ -30,4 +30,3 @@ func (l LogProgressWriteBuffer) WriteAt(p []byte, offset int64) (n int, err erro
 	l.bar.Add64(int64(len(p)))
 	return l.w.WriteAt(p, offset)
 }
-
