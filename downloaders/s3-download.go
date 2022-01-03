@@ -52,7 +52,7 @@ func (d *S3Download) Start(ctx context.Context) error {
 		s3md.Concurrency = int(d.Threads)
 		s3md.BufferProvider = s3manager.NewPooledBufferedWriterReadFromProvider(int(d.Partsize))
 	})
-	for w := 1; w < int(d.Workers); w++ {
+	for w := 1; w <= int(d.Workers); w++ {
 		eg.Go(func() error {
 			return d.worker(int(w), downloader, jobs)
 		})

@@ -42,7 +42,7 @@ func (d *FilesystemDownload) Start(ctx context.Context) error {
 	// if the job queue ends up filling up, we'll stall doing additional list ops until the queue has more messages completed
 	jobs := make(chan FileCopyJob, d.MaxList*3)
 	eg, ctx := errgroup.WithContext(ctx)
-	for w := 1; w < int(d.Workers); w++ {
+	for w := 1; w <= int(d.Workers); w++ {
 		eg.Go(func() error {
 			return d.worker(int(w), jobs)
 		})
@@ -141,7 +141,7 @@ func (d FilesystemDownload) worker(id int, jobs <-chan FileCopyJob) error {
 		// Startup the copy threadpool
 		eg, _ := errgroup.WithContext(context.Background())
 		partsToCopy := make(chan PartCopyJob, d.Threads*2)
-		for t := 1; t < int(d.Threads); t++ {
+		for t := 1; t <= int(d.Threads); t++ {
 			eg.Go(func() error {
 				return d.partCopyWorker(int(t), partsToCopy)
 			})
