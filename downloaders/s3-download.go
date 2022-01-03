@@ -2,7 +2,6 @@ package downloaders
 
 import (
 	"context"
-	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	s3manager "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
@@ -108,9 +107,15 @@ func (d S3Download) list(client *s3.Client, jobs chan<- s3types.Object) error {
 }
 
 func (d S3Download) worker(id int, downloader *s3manager.Downloader, jobs <-chan s3types.Object) error {
+	// filepath.Dir returns "." if there's no dir in the path
+ 	prefixDir := filepath.Dir(d.Prefix)
+	if prefixDir == "." {
+		prefixDir = ""
+	}
+	
 	for j := range jobs {
-		objWritePath := fmt.Sprintf("%s/%s", d.Writepath, *j.Key)
-
+		objWritePath := filepath.Join(d.Writepath, (*j.Key)[len(prefixDir):])
+		
 		d.Log.Debugf("worker-%d writing s3://%s/%s to %s [%.2fMiB]\n",
 			id,
 			d.Bucket, *j.Key,

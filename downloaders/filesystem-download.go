@@ -165,9 +165,6 @@ func (d FilesystemDownload) worker(id int, jobs <-chan FileCopyJob) error {
 		if err := eg.Wait(); err != nil {
 			return err
 		}
-
-		// Log downloaded data
-		d.Bar.Add64(j.Size)
 	}
 	return nil
 }
@@ -193,6 +190,8 @@ func (d FilesystemDownload) partCopyWorker(id int, partsToCopy <-chan PartCopyJo
 		if bytesRead != bytesWritten {
 			return errors.New("Different number of bytes read & write")
 		}
+		// Log downloaded data
+		d.Bar.Add(bytesWritten)
 	}
 	return nil
 }

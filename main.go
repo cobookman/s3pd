@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"errors"
-	flag "github.com/spf13/pflag"
 	"fmt"
 	"github.com/cheggaaa/pb/v3"
-	"github.com/op/go-logging"
 	"github.com/cobookman/s3-parallel-downloader/downloaders"
+	"github.com/op/go-logging"
+	flag "github.com/spf13/pflag"
 	"net/url"
 	"os"
 	"runtime/pprof"
@@ -19,11 +19,11 @@ var (
 	source      string
 	destination string
 	region      string
-	workers 	uint
+	workers     uint
 	threads     uint
 	partsize    int64
-	maxList int
-	isBenchmark   bool
+	maxList     int
+	isBenchmark bool
 	loglevel    string
 	cpuprofile  string
 
@@ -94,7 +94,7 @@ func parseFlags() error {
 	if !isHelp {
 		source = args[0]
 	}
-	
+
 	if !isHelp && !isBenchmark {
 		destination = args[1]
 	}
@@ -174,12 +174,12 @@ func getDownloader() (downloaders.Downloader, error) {
 			Prefix:      prefix,
 			Writepath:   destination,
 			Region:      region,
-			Workers: 	 workers,
+			Workers:     workers,
 			Threads:     threads,
 			Partsize:    partsize,
-			MaxList: 	 maxList,
-			IsBenchmark:   isBenchmark,
-			Log:		 log,
+			MaxList:     maxList,
+			IsBenchmark: isBenchmark,
+			Log:         log,
 			Bar:         bar,
 		}
 		return &d, nil
@@ -189,21 +189,20 @@ func getDownloader() (downloaders.Downloader, error) {
 		return nil, errors.New("moves between S3 buckets not implemented")
 	}
 
-
 	if !isSourceS3 && isDestinationS3 {
 		return nil, errors.New("Uploads to S3 buckets not implemented")
 	}
 
 	if !isSourceS3 && !isDestinationS3 {
 		d := downloaders.FilesystemDownload{
-			Readpath:     source,
+			Readpath:    source,
 			Writepath:   destination,
-			Workers: 	 workers,
+			Workers:     workers,
 			Threads:     threads,
 			Partsize:    partsize,
-			MaxList: 	 maxList,
-			IsBenchmark:   isBenchmark,
-			Log:		 log,
+			MaxList:     maxList,
+			IsBenchmark: isBenchmark,
+			Log:         log,
 			Bar:         bar,
 		}
 		return &d, nil
@@ -211,4 +210,3 @@ func getDownloader() (downloaders.Downloader, error) {
 
 	return nil, errors.New("Unsupported cp operation")
 }
-
