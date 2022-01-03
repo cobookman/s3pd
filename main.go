@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/cheggaaa/pb/v3"
 	"github.com/op/go-logging"
+	"github.com/cobookman/s3-parallel-downloader/downloaders"
 	"net/url"
 	"os"
 	"runtime/pprof"
@@ -18,11 +19,11 @@ var (
 	source      string
 	destination string
 	region      string
-	downloaders uint
+	workers 	uint
 	threads     uint
 	partsize    int64
-	maxListKeys int
-	benchmark   bool
+	maxList int
+	isBenchmark   bool
 	loglevel    string
 	cpuprofile  string
 
@@ -36,11 +37,11 @@ func init() {
 	// or AWS shared credentials file (~/.aws/credentials).
 	flag.StringVar(&region, "region", "", "Force a specific S3 AWS Region endpoint to be used (Optional)")
 
-	flag.UintVar(&downloaders, "downloaders", 10, "Number of concurrent s3 downloads (Default 10)")
-	flag.UintVar(&threads, "threads", 5, "Number of threads used by each downloader (Default 5)")
+	flag.UintVar(&workers, "workers", 10, "Number of concurrent workers - concurrent API Calls (Default 10)")
+	flag.UintVar(&threads, "threads", 5, "Number of threads given to each worker (Default 5)")
 	flag.Int64Var(&partsize, "partsize", 5*1024*1024, "bytes to assign each thread to download, (Deafult 5*1024*1024)")
-	flag.IntVar(&maxListKeys, "maxlistkeys", 1000, "max number of object keys to return in each ls pagination request (Default 1000)")
-	flag.BoolVar(&benchmark, "benchmark", false, "set to true to test raw download to ram speed (Default false)")
+	flag.IntVar(&maxList, "maxlist", 1000, "max number of objects/files to return in each list request (Default 1000)")
+	flag.BoolVar(&isBenchmark, "benchmark", false, "set to true to test raw download to ram speed (Default false)")
 	flag.StringVar(&loglevel, "loglevel", "NOTICE", "Level of logging to expose, INFO, NOTICE, WARNING, ERROR. (Default \"NOTICE\")")
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "Writes cpu profile to specified filepath (Optional)")
 }
@@ -73,11 +74,11 @@ func parseFlags() error {
 		fmt.Fprintf(w, "\ts3pd s3://mybucket/mydataset/* /mnt/scratch\n\n\n")
 		fmt.Fprintf(w, "The following is how to download objects in mybucket with the prefix of mydataset/* to /mnt/scratch")
 		fmt.Fprintf(w, "using the s3 api in us-east-2, and downloading 25 objects at a time\n\n")
-		fmt.Fprintf(w, "\ts3pd s3://mybucket/mydataset/* /mnt/scratch --region=us-east-2 --downloaders=25\n\n\n")
+		fmt.Fprintf(w, "\ts3pd s3://mybucket/mydataset/* /mnt/scratch --region=us-east-2 --workers=25\n\n\n")
 		fmt.Fprintf(w, "The following is how to download objects in mybucket with the prefix of mydataset/* to /mnt/scratch")
 		fmt.Fprintf(w, "using the s3 api in us-east-2, and downloading 25 objects at a time. With 5 threads used ")
 		fmt.Fprintf(w, "to download each object. 125 concurrent s3 downloads total)\n\n")
-		fmt.Fprintf(w, "\ts3pd s3://mybucket/mydataset/* /mnt/scratch --region=us-east-2 --downloaders=25 --threads=5\n\n")
+		fmt.Fprintf(w, "\ts3pd s3://mybucket/mydataset/* /mnt/scratch --region=us-east-2 --workers=25 --threads=5\n\n")
 		fmt.Fprintf(w, "\033[1mFLAGS:\033[0m\n")
 		flag.PrintDefaults()
 	}
@@ -85,8 +86,8 @@ func parseFlags() error {
 
 	args := flag.Args()
 	isHelp := len(args) == 1 && args[0] == "help"
-	hasSourceAndDest := len(args) == 2 || (len(args) == 1 && benchmark)
-	if isHelp && !hasSourceAndDest {
+	hasSourceAndDest := len(args) == 2 || (len(args) == 1 && isBenchmark)
+	if !isHelp && !hasSourceAndDest {
 		return errors.New("Missing [source] and [destination]")
 	}
 
@@ -94,15 +95,8 @@ func parseFlags() error {
 		source = args[0]
 	}
 	
-	if !isHelp && !benchmark {
+	if !isHelp && !isBenchmark {
 		destination = args[1]
-	}
-
-	// Error if both source & Destination are s3 paths
-	if !isHelp && strings.HasPrefix(source, "s3://") && strings.HasPrefix(destination, "s3://") {
-		err := "Cannot have s3 as both the source & destination.\n"
-		err += "s3pd does not support moving objects between S3 buckets"
-		return errors.New(err)
 	}
 
 	return nil
@@ -123,7 +117,7 @@ func main() {
 	// NOTE: When in benchmark mode this avoids needing to do filesystem IO in creating missing directories
 	// and opening file for writing.
 	// This is a savings of roughly 5 to 10ms per Object download request
-	if benchmark {
+	if isBenchmark {
 		fmt.Println("Benchmark mode, data being written to temporary in memory object")
 	}
 
@@ -151,31 +145,70 @@ func main() {
 	lm.SetLevel(logLevels[strings.ToUpper(loglevel)], "")
 	logging.SetBackend(lm)
 
-	if strings.HasPrefix(source, "s3://") {
-		performDownload()
-	} else if strings.HasPrefix(destination, "s3://") {
-		panic("writes not yet implemented")
-	}
-}
-
-func performDownload() {
-	bucket, prefix := parseS3Path(source)
-
-	download := Download{
-		bucket:      bucket,
-		prefix:      prefix,
-		writepath:   destination,
-		region:      region,
-		downloaders: downloaders,
-		threads:     threads,
-		partsize:    partsize,
-		maxListKeys: maxListKeys,
-		bar:         pb.New(1), // putting bar size of 1 as a placeholder
-	}
-
-	if err := download.Start(context.Background()); err != nil {
+	d, err := getDownloader()
+	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("\nAverage throughput was: %0.4fGibps\n", download.Throughput())
+	// Blocks until download is completed or on first error received
+	if err := d.Start(context.Background()); err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("\nAverage throughput was: %0.4fGibps\n", d.Throughput())
 }
+
+func getDownloader() (downloaders.Downloader, error) {
+	isSourceS3 := strings.HasPrefix(source, "s3://")
+	isDestinationS3 := strings.HasPrefix(destination, "s3://")
+
+	bar := pb.New(1) // putting bar size of 1 as a placeholder
+	bar.SetWriter(os.Stdout)
+	bar.Set(pb.SIBytesPrefix, false)
+	bar.Set(pb.Bytes, true)
+
+	if isSourceS3 && !isDestinationS3 {
+		bucket, prefix := parseS3Path(source)
+		d := downloaders.S3Download{
+			Bucket:      bucket,
+			Prefix:      prefix,
+			Writepath:   destination,
+			Region:      region,
+			Workers: 	 workers,
+			Threads:     threads,
+			Partsize:    partsize,
+			MaxList: 	 maxList,
+			IsBenchmark:   isBenchmark,
+			Log:		 log,
+			Bar:         bar,
+		}
+		return &d, nil
+	}
+
+	if isSourceS3 && isDestinationS3 {
+		return nil, errors.New("moves between S3 buckets not implemented")
+	}
+
+
+	if !isSourceS3 && isDestinationS3 {
+		return nil, errors.New("Uploads to S3 buckets not implemented")
+	}
+
+	if !isSourceS3 && !isDestinationS3 {
+		d := downloaders.FilesystemDownload{
+			Readpath:     source,
+			Writepath:   destination,
+			Workers: 	 workers,
+			Threads:     threads,
+			Partsize:    partsize,
+			MaxList: 	 maxList,
+			IsBenchmark:   isBenchmark,
+			Log:		 log,
+			Bar:         bar,
+		}
+		return &d, nil
+	}
+
+	return nil, errors.New("Unsupported cp operation")
+}
+
