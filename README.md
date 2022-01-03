@@ -1,10 +1,14 @@
 # S3 Parallel Downloader
 
 CLI utility that downloads multiple s3 objects at a time, with multiple range-requests issued per object.
-Also supports copying between filesystem locations using multiple threads
+It also has support for copying between local filesystem locations using multiple threads.
 
-Copy operations will always recurse the directory. When reading from a local filesystem, symlinks will not be followed
+Operations will always recurse the specified directories. When reading from a local filesystem, symlinks will not be followed.
 
+Known Issues:
+- If your S3 bucket has a folder and object with the same name, this utility will fail. (E.g. `s3://mybucket/test.txt` && `s3://mybucket/test.txt/another-object.txt`). This fails as POSIX filesystems cannot have a folder and file with the same absolute path.
+- Support for writing to S3 has not yet been added.
+- 
 
 ### Benchmark resuts
 
@@ -12,7 +16,6 @@ Copy operations will always recurse the directory. When reading from a local fil
 ```
 ./s3pd-linux-amd64 \
 --region=us-west-2 \
---prefix=32MiB/ \
 --workers=185 \
 --threads=2 \
 --partsize=$((4*1024*1024))
