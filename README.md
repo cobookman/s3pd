@@ -29,13 +29,13 @@ s3://test-400gbps-s3/32MiB/ /mnt/ram-disk
 s3://test-400gbps-s3/2GiB/ /mnt/ram-disk
 ```
 
-**249.5305Gibps** - 1994ms transferring 65GiB of data from a **local RAM disk to a local RAM disk**
+**258.0953Gibps** - 2014ms transferring 65GiB of data from a **local RAM disk to a local RAM disk**
 ```
 ./s3pd-linux-amd64 \
---workers=100 \
---threads=2 \
---partsize=$((64*1024)) \
-/mnt/ram-disk/32MiB /mnt/ram-disk/scratch
+--workers=300 \
+--threads=1 \
+--partsize=$((128*1024)) \
+/mnt/ram-disk/32MiB /mnt/ram-disk/234
 ```
 
 ### Example CLI usage
