@@ -26,13 +26,14 @@ type S3Download struct {
 	Partsize    int64
 	MaxList int
 	IsBenchmark	bool
+	NICs []string
 	Bar         *pb.ProgressBar
 	Log			*logging.Logger
 	StartTime       time.Time
 }
 
 func (d *S3Download) Start(ctx context.Context) error {
-	d.StartTime = time.Now()
+	d.StartTime = time.Now()	
 
 	// Create s3 client
 	// Note, if region is an empty string, then will ignore the region value and use the region from system config
@@ -40,14 +41,24 @@ func (d *S3Download) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	client := s3.NewFromConfig(cfg)
+
+	// If Multiple NICs requested, use our custom multi-nic http-client
+	if len(d.NICs) != 0 {
+		mnHTTPClient, err := NewMultiNicHTTPClient(d.NICs)
+		if err != nil {
+			return err
+		}
+		cfg.HTTPClient = mnHTTPClient
+	}
+
+	s3Client := s3.NewFromConfig(cfg)
 
 	// Instantiate download workers
 	// Set job's channel length to 3x max objects we'll get in a list op
 	// if the job queue ends up filling up, we'll stall doing additional list ops until the queue has more messages completed
 	jobs := make(chan s3types.Object, d.MaxList*3)
 	eg, ctx := errgroup.WithContext(ctx)
-	downloader := s3manager.NewDownloader(client, func(s3md *s3manager.Downloader) {
+	downloader := s3manager.NewDownloader(s3Client, func(s3md *s3manager.Downloader) {
 		s3md.PartSize = d.Partsize
 		s3md.Concurrency = int(d.Threads)
 		s3md.BufferProvider = s3manager.NewPooledBufferedWriterReadFromProvider(int(d.Partsize))
@@ -62,7 +73,7 @@ func (d *S3Download) Start(ctx context.Context) error {
 	d.Bar.Start()
 	
 	// Queue up download tasks
-	if err := d.list(client, jobs); err != nil {
+	if err := d.list(s3Client, jobs); err != nil {
 		// if error clean up workers and return the error
 		close(jobs)
 		ctx.Done()

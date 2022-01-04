@@ -23,9 +23,11 @@ var (
 	threads     uint
 	partsize    int64
 	maxList     int
+	nics		string
 	isBenchmark bool
 	loglevel    string
 	cpuprofile  string
+	
 
 	// globals
 	log = logging.MustGetLogger("s3pd")
@@ -42,6 +44,7 @@ func init() {
 	flag.Int64Var(&partsize, "partsize", 5*1024*1024, "bytes to assign each thread to download, (Deafult 5*1024*1024)")
 	flag.IntVar(&maxList, "maxlist", 1000, "max number of objects/files to return in each list request (Default 1000)")
 	flag.BoolVar(&isBenchmark, "benchmark", false, "set to true to test raw download to ram speed (Default false)")
+	flag.StringVar(&nics, "nics", "", "to send load across multiple NICs, set to a list of network interfaces to LB across E.g. (--nics=en0,en1,en2,en3)")
 	flag.StringVar(&loglevel, "loglevel", "NOTICE", "Level of logging to expose, INFO, NOTICE, WARNING, ERROR. (Default \"NOTICE\")")
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "Writes cpu profile to specified filepath (Optional)")
 }
@@ -158,6 +161,18 @@ func main() {
 	fmt.Printf("\nAverage throughput was: %0.4fGibps\n", d.Throughput())
 }
 
+func getNicsArr(nicsStr string) (nicsArr []string) {
+	if len(nicsStr) == 0 {
+		return nicsArr
+	}
+
+	if strings.HasSuffix(nicsStr, ",") {
+		nicsStr = nicsStr[:len(nicsStr)-1]
+	}
+
+	return strings.Split(nicsStr, ",")
+}
+
 func getDownloader() (downloaders.Downloader, error) {
 	isSourceS3 := strings.HasPrefix(source, "s3://")
 	isDestinationS3 := strings.HasPrefix(destination, "s3://")
@@ -181,6 +196,7 @@ func getDownloader() (downloaders.Downloader, error) {
 			IsBenchmark: isBenchmark,
 			Log:         log,
 			Bar:         bar,
+			NICs:		 getNicsArr(nics),
 		}
 		return &d, nil
 	}
