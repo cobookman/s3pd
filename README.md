@@ -18,7 +18,7 @@ Known Issues:
 --region=us-west-2 \
 --workers=185 \
 --threads=2 \
---partsize=$((4*1024*1024))
+--partsize=$((4*1024*1024)) \
 s3://test-400gbps-s3/32MiB/ /mnt/ram-disk
 ```
 
