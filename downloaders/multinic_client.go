@@ -115,17 +115,11 @@ func NewMultiNicHTTPClient(nicNames []string) (*MultiNicHTTPClient, error) {
 }
 
 /**
- * We should have no issue in running this for each and every HTTP request
- * That will incur TCP + TLS connection re-establishment overhead. But that is minimal (<=1ms)
- * compared to time spent downloading an object chunk.
- * AWS SDKv2 - https://github.com/aws/aws-sdk-go-v2/blob/db2e64c2fc49a77351009020a9c0995a640278c7/service/s3/api_client.go#L230-L235
- * https://github.com/aws/aws-sdk-go-v2/blob/db2e64c2fc49a77351009020a9c0995a640278c7/aws/transport/http/client.go#L65-L69
- *
  * From the go standard libraries http.Client docs:
  * The Client's Transport typically has internal state (cached TCP connections), so Clients should be reused instead of created as needed.
  * Clients are safe for concurrent use by multiple goroutines.
  */
-func (mn MultiNicHTTPClient) Client() (*http.Client) {
+func (mn *MultiNicHTTPClient) Client() (*http.Client) {
 		// load balance across the NICs
 		i := atomic.AddUint32(&mn.counter, 1) % uint32(len(mn.NICs))
 		return mn.httpClients[i]
