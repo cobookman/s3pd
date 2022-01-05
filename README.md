@@ -113,7 +113,7 @@ For example this command load balances traffic across 4 ENIs attached at `en0`, 
 s3://test-400gbps-s3/2GiB/ /mnt/ram-disk
 ```
 
-#### Spinning up an Ec2 instance with 4 ENIs
+#### Spinning up a multicard Ec2 instance 
 **Note** most ec2 instance types do not support the 4x100G configuration.
 In particular the p4d and dl1 support this.
 
