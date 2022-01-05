@@ -133,11 +133,12 @@ SUBNET="subnet-ddddaab" # Replace with the target subnet-id
 SG="sg-000000000000ddddf # Replace with the Security Group ID you'd like to assign
 AMI_ID="ami-00f7e5c52c0f43726" # Replace with the AMI you'd to have this instance use
 INSTANCE_TYPE="dl1.24xlarge"
+EC2_KEY_PAIR="my_ec2_ssh_key_pair" # See - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html
 
 aws ec2 run-instances --region us-west-2 \
 	--image-id $AMI_ID \
 	--instance-type $INSTANCE_TYPE \
-	--key-name m1-mbp-work \
+	--key-name $EC2_KEY_PAIR \
         --network-interfaces "NetworkCardIndex=0,DeviceIndex=0,Groups=${SG},SubnetId=${SUBNET},InterfaceType=efa" \
                              "NetworkCardIndex=1,DeviceIndex=1,Groups=${SG},SubnetId=${SUBNET},InterfaceType=efa" \
                              "NetworkCardIndex=2,DeviceIndex=2,Groups=${SG},SubnetId=${SUBNET},InterfaceType=efa" \
