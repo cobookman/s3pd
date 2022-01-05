@@ -133,10 +133,14 @@ func (d FilesystemDownload) worker(id int, jobs <-chan FileCopyJob) error {
 		if err != nil {
 			return err
 		}
-		// TODO(boocolin): Update destination to be ioutil Discard
-		destination, err := os.OpenFile(absoluteWritepath, os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return err
+
+		var destination *os.File = nil
+		if !d.IsBenchmark {
+			var err error
+			destination, err = os.OpenFile(absoluteWritepath, os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Startup the copy threadpool
