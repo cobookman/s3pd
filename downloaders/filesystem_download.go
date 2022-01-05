@@ -2,6 +2,7 @@ package downloaders
 
 import (
 	"context"
+	"io/ioutil"
 	"github.com/cheggaaa/pb/v3"
 	"golang.org/x/sync/errgroup"
 	"github.com/op/go-logging"
@@ -133,6 +134,7 @@ func (d FilesystemDownload) worker(id int, jobs <-chan FileCopyJob) error {
 		if err != nil {
 			return err
 		}
+		// TODO(boocolin): Update destination to be ioutil Discard
 		destination, err := os.OpenFile(absoluteWritepath, os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return err
@@ -182,16 +184,20 @@ func (d FilesystemDownload) partCopyWorker(id int, partsToCopy <-chan PartCopyJo
 			return err
 		}
 
-		bytesWritten, err := p.Destination.WriteAt(buffer[:bytesRead], p.Offset)
-		if err != nil {
-			return err
-		}
+		if d.IsBenchmark {
+			ioutil.Discard.Write(buffer[:bytesRead])
+		} else {
+			bytesWritten, err := p.Destination.WriteAt(buffer[:bytesRead], p.Offset)
+			if err != nil {
+				return err
+			}
 
-		if bytesRead != bytesWritten {
-			return errors.New("Different number of bytes read & write")
+			if bytesRead != bytesWritten {
+				return errors.New("Different number of bytes read & write")
+			}
 		}
 		// Log downloaded data
-		d.Bar.Add(bytesWritten)
+		d.Bar.Add(bytesRead)
 	}
 	return nil
 }
