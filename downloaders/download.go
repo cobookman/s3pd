@@ -5,6 +5,6 @@ import (
 )
 
 type Downloader interface {
-    Throughput() float64 
+	Throughput() float64
 	Start(ctx context.Context) error
 }

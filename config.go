@@ -1,14 +1,14 @@
 package main
 
 import (
-	"os"
-	flag "github.com/spf13/pflag"
-	"fmt"
 	"errors"
+	"fmt"
+	flag "github.com/spf13/pflag"
+	"os"
 	"strings"
 )
 
-type Config struct  {
+type Config struct {
 	// positional arguments
 	source      string
 	destination string
@@ -33,7 +33,7 @@ func NewConfig(args []string) (c *Config, err error) {
 
 func (c *Config) parse(args []string) (err error) {
 	f := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	
+
 	// if region is left as an empty string, AWS SDK will get the region from:
 	// environment variables, AWS shared configuration file (~/.aws/config),
 	// or AWS shared credentials file (~/.aws/credentials).

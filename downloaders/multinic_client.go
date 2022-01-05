@@ -1,11 +1,11 @@
 package downloaders
 
 import (
-	"errors"
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
-	"fmt"
 	"sync/atomic"
 )
 
@@ -21,14 +21,14 @@ func getIP(ifaceName string) (ip net.IP, mask net.IPMask, err error) {
 	}
 
 	for _, addr := range addrs {
-        switch v := addr.(type) {
-        case *net.IPNet:
-            ip = v.IP
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip = v.IP
 			mask = v.Mask
-        case *net.IPAddr:
-            ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
 			mask = ip.DefaultMask()
-        }
+		}
 
 		if ip != nil && ip.To4() != nil {
 			return ip, mask, nil
@@ -44,7 +44,7 @@ func getNicIP(ip net.IP) (string, error) {
 		return addr, nil
 	}
 	return "", fmt.Errorf("No IPv4 or IPv6 address for Nic's IP's")
-}	
+}
 
 func createHttpClient(ip net.IP) (*http.Client, error) {
 	// Get our Client
@@ -55,7 +55,7 @@ func createHttpClient(ip net.IP) (*http.Client, error) {
 
 	// :0 tells linux to dynamically assign us an unused port
 	// https://www.lifewire.com/port-0-in-tcp-and-udp-818145
-	tcpAddr, resolveErr := net.ResolveTCPAddr("tcp", addr + ":0")
+	tcpAddr, resolveErr := net.ResolveTCPAddr("tcp", addr+":0")
 	if resolveErr != nil {
 		return nil, resolveErr
 	}
@@ -81,14 +81,14 @@ type HTTPClient interface {
 
 type MultiNicHTTPClient struct {
 	// List of NICs we're load balancing traffic across
-	NICs []net.IP 
+	NICs []net.IP
 
 	// HTTP Clients corresponding to said NICs
 	httpClients []*http.Client
 
 	//if this overflows a-ok as we'll start back at 0
 	// only using it for shuffling traffic.
-	counter uint32 
+	counter uint32
 }
 
 func NewMultiNicHTTPClient(nicNames []string) (*MultiNicHTTPClient, error) {
@@ -110,7 +110,7 @@ func NewMultiNicHTTPClient(nicNames []string) (*MultiNicHTTPClient, error) {
 		}
 
 		mn.httpClients[i] = httpClient
-	}	
+	}
 	return &mn, nil
 }
 
@@ -119,11 +119,11 @@ func NewMultiNicHTTPClient(nicNames []string) (*MultiNicHTTPClient, error) {
  * The Client's Transport typically has internal state (cached TCP connections), so Clients should be reused instead of created as needed.
  * Clients are safe for concurrent use by multiple goroutines.
  */
-func (mn *MultiNicHTTPClient) Client() (*http.Client) {
-		// load balance across the NICs
-		i := atomic.AddUint32(&mn.counter, 1) % uint32(len(mn.NICs))
-		return mn.httpClients[i]
-		
+func (mn *MultiNicHTTPClient) Client() *http.Client {
+	// load balance across the NICs
+	i := atomic.AddUint32(&mn.counter, 1) % uint32(len(mn.NICs))
+	return mn.httpClients[i]
+
 }
 
 // Load balances traffic across the HTTP Clients

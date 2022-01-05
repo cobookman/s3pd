@@ -2,38 +2,38 @@ package main
 
 import (
 	"fmt"
-	"reflect"
-    "testing"
 	"github.com/stretchr/testify/assert"
+	"reflect"
+	"testing"
 )
 
 type configTest struct {
-	args []string
+	args     []string
 	expected Config
 }
 
 var defaults = Config{
-	source: "",
+	source:      "",
 	destination: "",
-	region: "",
-	workers: 10,
-	threads: 5,
-	partsize: 5*1024*1024,
-	maxList: 1000,
-	nics: "",
+	region:      "",
+	workers:     10,
+	threads:     5,
+	partsize:    5 * 1024 * 1024,
+	maxList:     1000,
+	nics:        "",
 	isBenchmark: false,
-	loglevel: "NOTICE",
-	cpuprofile: "",		
+	loglevel:    "NOTICE",
+	cpuprofile:  "",
 }
 
-
 var configTests []configTest
+
 func TestMain(m *testing.M) {
 	test1 := defaults
 	test1.source = "s3://mybucket/prefix"
 	test1.destination = "/mnt/ram-disk/"
 	configTests = append(configTests, configTest{
-		args: []string{"s3pd", "s3://mybucket/prefix", "/mnt/ram-disk/"},
+		args:     []string{"s3pd", "s3://mybucket/prefix", "/mnt/ram-disk/"},
 		expected: test1,
 	})
 
@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 	test2.loglevel = "DEBUG"
 	test2.cpuprofile = "~/prof.prof"
 	configTests = append(configTests, configTest{
-		args: []string{"s3pd", 
+		args: []string{"s3pd",
 			"s3://mybucket/prefix/longer//", "/mnt/ram-disk",
 			"--region=us-west-2",
 			"--workers=100",
@@ -64,7 +64,7 @@ func TestMain(m *testing.M) {
 	test3.source = "s3://mybucket/prefix/longer"
 	test3.isBenchmark = true
 	configTests = append(configTests, configTest{
-		args: []string{"s3pd", 
+		args: []string{"s3pd",
 			"s3://mybucket/prefix/longer", "/mnt/ram-disk",
 			"--benchmark"},
 		expected: test3,
@@ -76,7 +76,7 @@ func TestMain(m *testing.M) {
 	test4.region = "us-west-2"
 	test4.threads = 20
 	configTests = append(configTests, configTest{
-		args: []string{"s3pd", 
+		args: []string{"s3pd",
 			"--region=us-west-2",
 			"s3://mybucket/prefix/longer/", "/mnt/ram-disk",
 			"--threads=20"},
@@ -86,7 +86,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewConfig(t *testing.T) {
-	
+
 	fmt.Printf("Expected configTests[0].expected.workers: %v\n", configTests[0].expected.workers)
 	for _, ct := range configTests {
 		actual, err := NewConfig(ct.args)
@@ -108,7 +108,6 @@ func TestNicsArr(t *testing.T) {
 	arr = c.NicsArr()
 	assert.Equal(t, "en0", arr[0], "Should parse string")
 	assert.Equal(t, "en1", arr[1], "Should parse string")
-
 
 	c = Config{nics: "en1,"}
 	arr = c.NicsArr()

@@ -2,7 +2,7 @@ package downloaders
 
 import (
 	"io/ioutil"
-    "testing"
+	"testing"
 )
 
 func TestNewMultiNicHTTPClient(t *testing.T) {
@@ -28,7 +28,7 @@ func TestMakeHTTPCall(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	
+
 	client, err := mn.Client()
 	if err != nil {
 		t.Error(err)
@@ -40,7 +40,7 @@ func TestMakeHTTPCall(t *testing.T) {
 		t.Error(err)
 	}
 
-	data, err := ioutil.ReadAll(response.Body);
+	data, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		t.Error(err)
 	}
@@ -56,7 +56,7 @@ func TestMakeClientSpeed(t *testing.T) {
 		if err != nil {
 			b.Error(err)
 		}
-	
+
 		_, err = mn.Client()
 		if err != nil {
 			b.Error(err)

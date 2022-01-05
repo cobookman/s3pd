@@ -8,9 +8,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/cheggaaa/pb/v3"
+	"github.com/op/go-logging"
 	"golang.org/x/sync/errgroup"
 	"io"
-	"github.com/op/go-logging"
 	"os"
 	"path/filepath"
 	"time"
@@ -21,19 +21,19 @@ type S3Download struct {
 	Prefix      string
 	Writepath   string
 	Region      string
-	Workers uint
+	Workers     uint
 	Threads     uint
 	Partsize    int64
-	MaxList int
-	IsBenchmark	bool
-	NICs []string
+	MaxList     int
+	IsBenchmark bool
+	NICs        []string
 	Bar         *pb.ProgressBar
-	Log			*logging.Logger
-	StartTime       time.Time
+	Log         *logging.Logger
+	StartTime   time.Time
 }
 
 func (d *S3Download) Start(ctx context.Context) error {
-	d.StartTime = time.Now()	
+	d.StartTime = time.Now()
 
 	// Create s3 client
 	// Note, if region is an empty string, then will ignore the region value and use the region from system config
@@ -68,10 +68,10 @@ func (d *S3Download) Start(ctx context.Context) error {
 			return d.worker(int(w), downloader, jobs)
 		})
 	}
-	
+
 	// Start the progress bar
 	d.Bar.Start()
-	
+
 	// Queue up download tasks
 	if err := d.list(s3Client, jobs); err != nil {
 		// if error clean up workers and return the error
@@ -119,14 +119,14 @@ func (d S3Download) list(client *s3.Client, jobs chan<- s3types.Object) error {
 
 func (d S3Download) worker(id int, downloader *s3manager.Downloader, jobs <-chan s3types.Object) error {
 	// filepath.Dir returns "." if there's no dir in the path
- 	prefixDir := filepath.Dir(d.Prefix)
+	prefixDir := filepath.Dir(d.Prefix)
 	if prefixDir == "." {
 		prefixDir = ""
 	}
-	
+
 	for j := range jobs {
 		objWritePath := filepath.Join(d.Writepath, (*j.Key)[len(prefixDir):])
-		
+
 		d.Log.Debugf("worker-%d writing s3://%s/%s to %s [%.2fMiB]\n",
 			id,
 			d.Bucket, *j.Key,

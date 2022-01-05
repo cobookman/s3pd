@@ -2,37 +2,37 @@ package downloaders
 
 import (
 	"context"
-	"io/ioutil"
-	"github.com/cheggaaa/pb/v3"
-	"golang.org/x/sync/errgroup"
-	"github.com/op/go-logging"
-	"path/filepath"
-	"io/fs"
-	"io"
-	"time"
-	"path"
 	"errors"
+	"github.com/cheggaaa/pb/v3"
+	"github.com/op/go-logging"
+	"golang.org/x/sync/errgroup"
+	"io"
+	"io/fs"
+	"io/ioutil"
 	"os"
+	"path"
+	"path/filepath"
+	"time"
 )
 
 type FilesystemDownload struct {
 	Readpath    string
 	Writepath   string
-	Workers 	uint
+	Workers     uint
 	Threads     uint
 	Partsize    int64
-	MaxList 	int
-	IsBenchmark	bool
+	MaxList     int
+	IsBenchmark bool
 	Bar         *pb.ProgressBar
-	Log			*logging.Logger
-	StartTime       time.Time
+	Log         *logging.Logger
+	StartTime   time.Time
 }
 
 type FileCopyJob struct {
 	Readpath string
 	Filepath string
-	Name string
-	Size int64
+	Name     string
+	Size     int64
 }
 
 func (d *FilesystemDownload) Start(ctx context.Context) error {
@@ -94,8 +94,8 @@ func (d FilesystemDownload) list(jobs chan<- FileCopyJob) error {
 			jobs <- FileCopyJob{
 				Readpath: d.Readpath,
 				Filepath: path,
-				Name: f.Name(),
-				Size: fileinfo.Size(),
+				Name:     f.Name(),
+				Size:     fileinfo.Size(),
 			}
 			numBytes += fileinfo.Size()
 			d.Bar.SetTotal(numBytes)
@@ -105,9 +105,9 @@ func (d FilesystemDownload) list(jobs chan<- FileCopyJob) error {
 }
 
 type PartCopyJob struct {
-	Source *os.File
+	Source      *os.File
 	Destination *os.File
-	Offset int64
+	Offset      int64
 }
 
 func (d FilesystemDownload) worker(id int, jobs <-chan FileCopyJob) error {
@@ -116,7 +116,6 @@ func (d FilesystemDownload) worker(id int, jobs <-chan FileCopyJob) error {
 	// for t := 1; w < int(d.Threads); t++ {
 
 	// }
-
 
 	for j := range jobs {
 		relativePath := j.Filepath[len(j.Readpath):]
@@ -153,15 +152,14 @@ func (d FilesystemDownload) worker(id int, jobs <-chan FileCopyJob) error {
 		var offset int64 = 0
 		for offset < j.Size {
 			partsToCopy <- PartCopyJob{
-				Source: source,
+				Source:      source,
 				Destination: destination,
-				Offset: offset,
+				Offset:      offset,
 			}
 			offset += d.Partsize
 		}
 		close(partsToCopy)
 
-	
 		// Block & wait till all parts are copied
 		// If err occurs pass it back
 		if err := eg.Wait(); err != nil {
@@ -171,16 +169,15 @@ func (d FilesystemDownload) worker(id int, jobs <-chan FileCopyJob) error {
 	return nil
 }
 
-
 // Copies the parts sent to the partsToCopy channel
 func (d FilesystemDownload) partCopyWorker(id int, partsToCopy <-chan PartCopyJob) error {
 	buffer := make([]byte, d.Partsize, d.Partsize)
 	for p := range partsToCopy {
 		d.Log.Debugf("Received job to copy from %v to %v at offset: %d",
 			p.Source, p.Destination, p.Offset)
-		
+
 		bytesRead, err := p.Source.ReadAt(buffer, p.Offset)
-		if err != nil && err != io.EOF{
+		if err != nil && err != io.EOF {
 			return err
 		}
 
