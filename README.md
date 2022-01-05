@@ -138,8 +138,8 @@ aws ec2 run-instances --region us-west-2 \
 	--image-id $AMI_ID \
 	--instance-type $INSTANCE_TYPE \
 	--key-name m1-mbp-work \
-        --network-interfaces "NetworkCardIndex=0,DeviceIndex=0,Groups=$SG,SubnetId=${SUBNET},InterfaceType=efa" \
-                             "NetworkCardIndex=1,DeviceIndex=1,Groups=$SG,SubnetId=${SUBNET},InterfaceType=efa" \
-                             "NetworkCardIndex=2,DeviceIndex=2,Groups=$SG,SubnetId=${SUBNET},InterfaceType=efa" \
-                             "NetworkCardIndex=3,DeviceIndex=3,Groups=$SG,SubnetId=${SUBNET},InterfaceType=efa"
+        --network-interfaces "NetworkCardIndex=0,DeviceIndex=0,Groups=${SG},SubnetId=${SUBNET},InterfaceType=efa" \
+                             "NetworkCardIndex=1,DeviceIndex=1,Groups=${SG},SubnetId=${SUBNET},InterfaceType=efa" \
+                             "NetworkCardIndex=2,DeviceIndex=2,Groups=${SG},SubnetId=${SUBNET},InterfaceType=efa" \
+                             "NetworkCardIndex=3,DeviceIndex=3,Groups=${SG},SubnetId=${SUBNET},InterfaceType=efa"
 ```
