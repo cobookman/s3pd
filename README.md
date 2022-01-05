@@ -8,7 +8,6 @@ Operations will always recurse the specified directories. When reading from a lo
 Known Issues:
 - If your S3 bucket has a folder and object with the same name, this utility will fail. (E.g. `s3://mybucket/test.txt` && `s3://mybucket/test.txt/another-object.txt`). This fails as POSIX filesystems cannot have a folder and file with the same absolute path.
 - Support for writing to S3 has not yet been added.
-- 
 
 ### Benchmark resuts
 
@@ -118,9 +117,15 @@ s3://test-400gbps-s3/2GiB/ /mnt/ram-disk
 **Note** most ec2 instance types do not support the 4x100G configuration.
 In particular the p4d and dl1 support this.
 
+> When you add a second network interface, Ec2 will no longer auto-assign a public IPv4 address.
+You will not be able to connect to the instance over IPv4 unless you assign an Elastic IP address to the primary
+network interface (eth0). You can assign the Elastic IP address after you complete the Launch wizard.
+[(AWS Docs)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/MultipleIP.html#assignIP-launch)
+
+
 The following script/cli command will create a dl1.24xl with 4 ENIs. Where each
 ENI is attached to a different NetworkCardIndex & DeviceIndex, giving 4x100G of throughput.
-Wehn traffic is sharded across all 4 of the ENIs, you can get up-to 400G of network throughput.
+When traffic is sharded across all 4 of the ENIs, you can get up-to 400G of network throughput.
 
 ```
 #!/bin/bash
