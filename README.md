@@ -31,7 +31,7 @@ s3://test-400gbps-s3/32MiB/ /mnt/ram-disk
 s3://test-400gbps-s3/2GiB/ /mnt/ram-disk
 ```
 
-**101.3641Gibps** - On a dl1.24xl, with 4x100 ENIs transferring 292GiB of data from S3 (146 x 2GiB objects) across 40*32 concurrent HTTP requests
+**101.3641Gibps** - On a dl1.24xl, with 4x100 ENIs transferring 292GiB of data from S3 (146 x 2GiB objects) across 40*32 concurrent HTTP requests **NOTE: The S3 CRT lib has much greater multi-nic performance capabilities. This program is hidding a client side limit from the niave multi-nic approach.**
 ```
 ./s3pd-linux-amd64 \
 --region=us-west-2\
